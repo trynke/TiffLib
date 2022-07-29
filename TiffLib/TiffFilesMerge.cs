@@ -5,7 +5,9 @@
         public bool isJPEG = false;
 
 
-        // копируем заголовок первого файла в списке, он будет основным
+        /// <summary>
+        /// Copies the header of the first file in the list. It will be the main header
+        /// </summary>
         internal static void CopyHeader(string sourceFile, string newPath)
         {
             using (FileStream fsNew = new(newPath, FileMode.Create, FileAccess.Write))
@@ -16,8 +18,9 @@
         }
 
 
-
-        // просто копируем файл в конец нового файла
+        /// <summary>
+        /// Just copies the file to the end of the new file
+        /// </summary>
         internal static long CopyFile(string sourceFile, string newPath)
         {
             using (FileStream fsSource = new(sourceFile, FileMode.Open, FileAccess.Read))
@@ -56,7 +59,9 @@
 
 
 
-        // меняем значения смещений в скопированном файле с учётом всех предыдущих скопированных
+        /// <summary>
+        /// Changes ofssets' values in the copied file with regard to all of the previous copied files
+        /// </summary>
         internal void ChangeOffsets(int offsetAddition, int position, int IFDOffset, string newPath, bool isLastPage)
         {
             using (FileStream fsNew = new(newPath, FileMode.Open, FileAccess.ReadWrite))
@@ -64,7 +69,7 @@
                 fsNew.Seek(position, SeekOrigin.Begin);
 
                 int readSize = 2;
-                byte[] numEntries = new byte[readSize]; // считываем количество полей (2 байта)
+                byte[] numEntries = new byte[readSize]; // Reading a number of the fields (2 bytes)
                 int bytesRead = 0;
 
                 while (readSize > 0)
@@ -84,7 +89,7 @@
                 for (int i = 0; i < numEntriesInt; i++)
                 {
                     readSize = 12;
-                    byte[] fieldDescriptor = new byte[readSize]; // считываем весь field descriptor
+                    byte[] fieldDescriptor = new byte[readSize]; // Reading all field descriptor
                     bytesRead = 0;
 
                     while (readSize > 0)
@@ -97,10 +102,10 @@
                         readSize -= n;
                     }
 
-                    byte[] fieldTag = fieldDescriptor[0..2];     // имя тега
-                    byte[] fieldType = fieldDescriptor[2..4];    // тип тега
-                    byte[] fieldLength = fieldDescriptor[4..8];  // размер данных
-                    byte[] fieldOffset = fieldDescriptor[8..12]; // сами данные или ссылка на них
+                    byte[] fieldTag = fieldDescriptor[0..2];     // tag's name
+                    byte[] fieldType = fieldDescriptor[2..4];    // tag's type
+                    byte[] fieldLength = fieldDescriptor[4..8];  // data length
+                    byte[] fieldOffset = fieldDescriptor[8..12]; // offset of the data or the data itself
 
                     long nextFieldPosition = fsNew.Position;
 
@@ -276,7 +281,7 @@
 
                 int nextIFDPosition = 0;
 
-                if (!isLastPage) // получаем смещение IFD следующего файла, чтобы сразу записать в конец этого
+                if (!isLastPage) // Getting the offset of the next file's IFD to write to the end of this file right away
                 {
                     byte[] prevHeader = TiffOperations.ReadHeader(files[i + 1]);
                     nextIFDPosition = (int)TiffOperations.GetFirstIFDPosition(prevHeader);

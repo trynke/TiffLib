@@ -2,6 +2,8 @@
 {
     public class TiffFile
     {
+        // Works with little-endian (intel) bytes order only
+
         public string path;
         public byte[] header = new byte[8];
 
@@ -14,7 +16,7 @@
 
         public bool isJPEG = false;
         
-        // Для JPEG:
+        // For JPEG:
         
         public long JPEGIFTagPosition = 0;
         public byte[] JPEGIFOffset = Array.Empty<byte>();
@@ -35,8 +37,9 @@
         }
 
 
-        // считываем заголовок (8 байтов), запоминаем его и возвращаем позицию первой ifd
-        // считаем что везде используется little-endian (intel)
+        /// <summary>
+        /// Reads the header (8 bytes), remembers it and returns first IFD's position
+        /// </summary>
         internal long GetHeader()  
         {
             header = TiffOperations.ReadHeader(path);
@@ -44,7 +47,7 @@
             long IFDPosition = TiffOperations.GetFirstIFDPosition(header);
 
             header[4] = 0x08;
-            for (int i = 5; i < 7; i++) // преобразуем заголовок, так как поменяется расположение первой ifd
+            for (int i = 5; i < 7; i++) // Transforms the header, because first IFD's location will change
             {
                 header[i] = 0x00;
             }
@@ -98,19 +101,21 @@
         }
 
 
-        // копируем информацию заголовка и ifd
+        /// <summary>
+        /// Copies information of the header and IFD
+        /// </summary>
         internal long CopyMetaData(long IFDPosition, string pathNew)
         {
             using (FileStream fsSource = new(path, FileMode.Open, FileAccess.Read))
             {
                 using (FileStream fsNew = new(pathNew, FileMode.Create, FileAccess.Write))
                 {
-                    fsNew.Write(header, 0, header.Length); // записываем в файле tiff'овский заголовок
+                    fsNew.Write(header, 0, header.Length); // Writes TIFF header to the file
 
-                    fsSource.Seek(IFDPosition, SeekOrigin.Begin); // перемещаемся на начало первой ifd для считывания
+                    fsSource.Seek(IFDPosition, SeekOrigin.Begin); // Moves to the beginning of the first IFD for reading
 
                     int readSize = 2;
-                    byte[] numEntries = new byte[readSize]; // считываем количество полей (2 байта)
+                    byte[] numEntries = new byte[readSize]; // Reading a number of the fields (2 bytes)
                     int bytesRead = 0;
 
                     while (readSize > 0)
@@ -123,18 +128,20 @@
                         readSize -= n;
                     }
 
-                    fsNew.Write(numEntries, 0, numEntries.Length); // записываем количество полей
+                    fsNew.Write(numEntries, 0, numEntries.Length); // Writes the number of the fields
 
                     Array.Reverse(numEntries);
                     int numEntriesInt = BytesOperations.GetInt(numEntries);
 
-                    int dataWritePosition = header.Length + numEntries.Length + numEntriesInt * 12 + 4; // отсюда будем записывать данные (после директории)
+                    // From here we will write the data (after the directory)
+                    int dataWritePosition = header.Length + numEntries.Length + numEntriesInt * 12 + 4; 
+
                     byte[] fieldsDataArray = Array.Empty<byte>();
 
                     for (int i = 0; i < numEntriesInt; i++)
                     {
                         readSize = 12;
-                        byte[] fieldDescriptor = new byte[readSize]; // считываем весь field descriptor (12 байтов), дальше поделим
+                        byte[] fieldDescriptor = new byte[readSize]; // Reading all field descriptor (12 bytes) for later splitting
                         bytesRead = 0;
 
                         while (readSize > 0)
@@ -148,15 +155,15 @@
                         }
 
                         byte[] fieldTag = fieldDescriptor[0..2];
-                        fsNew.Write(fieldTag, 0, fieldTag.Length); // записываем имя тега 
+                        fsNew.Write(fieldTag, 0, fieldTag.Length); // Writes tag's name
 
                         byte[] fieldType = fieldDescriptor[2..4];
-                        fsNew.Write(fieldType, 0, fieldType.Length); // записываем тип тега
+                        fsNew.Write(fieldType, 0, fieldType.Length); // Writes tag's type
 
                         byte[] fieldLength = fieldDescriptor[4..8];
-                        fsNew.Write(fieldLength, 0, fieldLength.Length); // записываем размер данных
+                        fsNew.Write(fieldLength, 0, fieldLength.Length); // Writes data length
 
-                        byte[] fieldOffset = fieldDescriptor[8..12]; // читаем, но не записываем, т.к. offset будет другое значение
+                        byte[] fieldOffset = fieldDescriptor[8..12]; // Reading but not writing, because offset will be another value
 
                         Array.Reverse(fieldTag);
                         int fieldTagInt = BytesOperations.GetInt(fieldTag);
@@ -183,7 +190,7 @@
                   
                         if (lengthInBytes <= 4)
                         { 
-                            fsNew.Write(fieldOffset); // если сами данные входят в поле offset, записываем их туда
+                            fsNew.Write(fieldOffset); // If data fits in the offset field, write it there
                             CheckTags(tag, fsNew.Position - 4, fieldOffset);
                         }   
 
@@ -191,9 +198,9 @@
                         {
                             byte[] dataPositionBytes = BitConverter.GetBytes(dataWritePosition);
 
-                            fsNew.Write(dataPositionBytes); // записываем позицию наших данных
+                            fsNew.Write(dataPositionBytes); // Writes the position of our data
 
-                            long currentReadPosition = fsSource.Position; // запоминаем текущую позицию, чтобы вернуться
+                            long currentReadPosition = fsSource.Position; // Saves current position to come back later
 
                             Array.Reverse(fieldOffset);
                             long fieldOffsetLong = BytesOperations.GetLong(fieldOffset);
@@ -201,7 +208,7 @@
                             fsSource.Seek(fieldOffsetLong, SeekOrigin.Begin);
 
                             readSize = lengthInBytes;
-                            byte[] readData = new byte[readSize]; // считываем данные тега
+                            byte[] readData = new byte[readSize]; // Reading the tag's data
                             bytesRead = 0;
 
                             while (readSize > 0)
@@ -218,7 +225,7 @@
 
                             fieldsDataArray = fieldsDataArray.Concat(readData).ToArray();
 
-                            dataWritePosition += lengthInBytes;  // обновляем позицию данных
+                            dataWritePosition += lengthInBytes;  // Updates the data position
 
                             fsSource.Seek(currentReadPosition, SeekOrigin.Begin);
                         }
@@ -264,7 +271,7 @@
                 {
                     if (!isJPEG)
                     {
-                        fsNew.Seek(0, SeekOrigin.End); // записываем в конец файла
+                        fsNew.Seek(0, SeekOrigin.End); // Writing to the end of the file
 
                         byte[] imageDataPositionBytes = Array.Empty<byte>();
 
@@ -360,7 +367,7 @@
                             byte[] newQTableOffset = BitConverter.GetBytes((int)fsNew.Position);
                             newJPEGQTablesOffsets = newJPEGQTablesOffsets.Concat(newQTableOffset).ToArray();
 
-                            readSize = 64; // размер каждой таблицы - 64 байта
+                            readSize = 64; // Size of each table - 64 bytes
                             byte[] QTable = new byte[readSize];
                             bytesRead = 0;
                             
@@ -398,7 +405,7 @@
                             byte[] newDCTableOffset = BitConverter.GetBytes((int)fsNew.Position);
                             newJPEGDCTablesOffsets = newJPEGDCTablesOffsets.Concat(newDCTableOffset).ToArray();
 
-                            readSize = 33; // размер каждой таблицы - максимум 33 байта
+                            readSize = 33; // Size of each table - max 33 bytes
                             byte[] DCTable = new byte[readSize];
                             bytesRead = 0;
 
@@ -436,7 +443,7 @@
                             byte[] newACTableOffset = BitConverter.GetBytes((int)fsNew.Position);
                             newJPEGACTablesOffsets = newJPEGACTablesOffsets.Concat(newACTableOffset).ToArray();
 
-                            readSize = 272; // размер каждой таблицы - максимум 272 байта
+                            readSize = 272; // Size of each table - max 272 bytes
                             byte[] ACTable = new byte[readSize];
                             bytesRead = 0;
 
