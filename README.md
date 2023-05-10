@@ -7,7 +7,7 @@ TiffLib is a .NET library for operating multipage TIFFs without decoding/encodin
 I couldn't find any free library that could handle OJPEG in TIFF files. So I wrote this one and it works almost perfectly (check out _"Your help"_ section). This library doesn't care what compression is used in the file: it doesn't change the compression or the final size of the file, just copies all the data with regard to the offsets.
 
 ## :computer: Starting
-The library is wrote using .NET 6.0. It doesn't require any third-party libraries or packages.
+The library is written using .NET 6.0. It doesn't require any third-party libraries or packages.
 Here is the code example for you:
 ``` csharp
 using TiffLib;
